@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  eureka-app:
+    build:
+      context: ./eureka-server/
+      dockerfile: Dockerfile
+    container_name: eureka-server
+    ports:
+      - "${EUREKA_PORT}:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${EUREKA_PORT}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: ./gateway/
+      dockerfile: Dockerfile
+    container_name: api-server
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    depends_on:
+      eureka-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${GATEWAY_PORT}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  book-database:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: book-database
+    environment:
+      POSTGRES_DB: ${BOOK_DB_NAME}
+      POSTGRES_USER: ${BOOK_DB_USER}
+      POSTGRES_PASSWORD: ${BOOK_DB_PASSWORD}
+    ports:
+      - "${BOOK_DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BOOK_DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  student-database:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: student-database
+    environment:
+      POSTGRES_DB: ${STUDENT_DB_NAME}
+      POSTGRES_USER: ${STUDENT_DB_USER}
+      POSTGRES_PASSWORD: ${STUDENT_DB_PASSWORD}
+    ports:
+      - "${STUDENT_DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STUDENT_DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  library-database:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: library-database
+    environment:
+      POSTGRES_DB: ${LIBRARY_DB_NAME}
+      POSTGRES_USER: ${LIBRARY_DB_USER}
+      POSTGRES_PASSWORD: ${LIBRARY_DB_PASSWORD}
+    ports:
+      - "${LIBRARY_DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LIBRARY_DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  book-app:
+    build:
+      context: ./bookservice/
+      dockerfile: Dockerfile
+    container_name: book-server
+    ports:
+      - "${BOOK_PORT}:8080"
+    depends_on:
+      eureka-app:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      book-database:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://book-database:5432/${BOOK_DB_NAME}
+      - SPRING_DATASOURCE_USERNAME=${BOOK_DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${BOOK_DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BOOK_PORT}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  student-app:
+    build:
+      context: ./student-server/
+      dockerfile: Dockerfile
+    container_name: student-server
+    ports:
+      - "${STUDENT_PORT}:8080"
+    depends_on:
+      eureka-app:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      student-database:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://student-database:5432/${STUDENT_DB_NAME}
+      - SPRING_DATASOURCE_USERNAME=${STUDENT_DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${STUDENT_DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${STUDENT_PORT}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  library-app:
+    build:
+      context: ./libraryservice/
+      dockerfile: Dockerfile
+    container_name: library-server
+    ports:
+      - "${LIBRARY_PORT}:8080"
+    depends_on:
+      eureka-app:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      library-database:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://library-database:5432/${LIBRARY_DB_NAME}
+      - SPRING_DATASOURCE_USERNAME=${LIBRARY_DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${LIBRARY_DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LIBRARY_PORT}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
